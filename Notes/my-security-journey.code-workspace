@@ -1,11 +1,7 @@
 {
-	"folders": [
-		{
-			"path": "../../my-security-journey"
-		},
-		{
-			"path": ".."
-		}
-	],
-	"settings": {}
+    "folders": [
+        {
+            "path": "."
+        }
+    ]
 }
