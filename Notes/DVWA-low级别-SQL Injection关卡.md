@@ -36,39 +36,12 @@
 | smithy | 5f4dcc3b5aa765d61d8327deb882cf99 | password |
 
 ### 漏洞根源
-查看源码（路径根据实际情况）：
-```bash
-cat /var/www/html/DVWA/vulnerabilities/sqli/source/low.php
 
-核心漏洞代码：
-$id = $_REQUEST['id'];
-$query  = "SELECT first_name, last_name FROM users WHERE user_id = '$id';";
-
-问题：直接拼接用户输入$id，未做任何过滤或参数化。
-
-## 防御机制源码对比
-
-通过对比四个级别的源码，清晰看到防御措施的演进：
-
-### Low级别（无防御）
-```php
-$id = $_REQUEST['id'];  // 接受GET/POST/COOKIE任意来源
-$query = "SELECT first_name, last_name FROM users WHERE user_id = '$id';";
-// 直接拼接，无任何过滤
-这是四个级别的核心差异！你已经抓住了关键。让我帮你整理成清晰的对比表格，直接写进文档。
-四个级别的核心防御机制对比
-表格
 级别	输入方式	核心防御代码	漏洞点	绕过难度
 Low	$_REQUEST['id']	直接拼接SQL	无过滤，任意字符注入	⭐ 极易
 Medium	$_POST['id']	mysql_real_escape_string()	转义单引号，但数字型注入仍可	⭐⭐ 中等
 High	$_SESSION['id']	预处理语句 + LIMIT 1	会话控制，但单条数据仍可注入	⭐⭐⭐ 较难
-Impossible	严格类型检查	预处理 + CSRF Token + 强制整型	无漏洞	❌ 无法绕过
-现在立即写进文档（19:06-19:20）
-在VS Code里，文档末尾添加：
-Markdown
-复制
-代码
-预览
+Impossible	严格类型检查	预处理 + CSRF Token + 强制整型	无漏洞	❌ 无法绕
 ## 防御机制源码对比
 
 通过对比四个级别的源码，清晰看到防御措施的演进：
