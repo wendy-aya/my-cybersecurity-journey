@@ -53,18 +53,18 @@ $query = "SELECT first_name, last_name FROM users WHERE user_id = '$id';";
 // 直接拼接，无任何过滤
 漏洞：任意SQL注入，可读取/修改任意数据
 
-### Medium级别（转义防御）
+Medium级别（转义防御）
 $id = $_POST['id'];  // 仅接受POST，但前端是下拉框，需抓包绕过
 $id = mysql_real_escape_string($id);  // 转义特殊字符
 绕过方法：使用十六进制编码或数字型注入（无需引号）
 
-### High级别（会话+预处理）
+High级别（会话+预处理）
 // 从Session获取，限制单条返回
 $id = $_SESSION['id'];
 $query = "SELECT first_name, last_name FROM users WHERE user_id = :id LIMIT 1;";
 局限：单次只能查一条，但仍可通过盲注逐条获取
 
-### Impossible级别（安全实践）
+Impossible级别（安全实践）
 // 强制类型检查 + 预处理 + CSRF防护
 if(!is_numeric($id)) {
     exit("Invalid ID");
