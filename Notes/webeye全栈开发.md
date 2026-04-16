@@ -81,4 +81,3 @@ src/main/java/com/webeye/
 - **架构价值**：展示了现代Java Web应用的最佳实践架构
 
 这个项目展示了如何使用Spring Boot生态系统构建一个功能完整的Web应用，特别强调了安全性和用户体验。它不仅是一个技术学习的范例，也是一个可以进一步扩展的实用工具。
-[text](vscode-local:/d%3A/webeye)
